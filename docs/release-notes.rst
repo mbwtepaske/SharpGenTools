@@ -2,6 +2,38 @@
 Release Notes
 =====================
 
+vNext.0
+========
+
+Features:
+
+    * Implemented default mapping for C++ ``long``.
+    * Implemented support for different generation based on various platform ABIs with one build.
+    * Implemented support for Itanium ABI vtable offsets for single inheritance.
+
+1.2
+========
+
+Features:
+
+    * Implemented relation mapping.
+    * Enabled automatic shadow generation for callbacks with array parameters when users specify length relations for array parameters.
+    * Emit ``GC.KeepAlive`` in marshalling cleanup to keep interface instances alive across calls.
+    * Use ``__has_include`` in generated headers to make SharpGen C++ generation/parsing process more deterministic.
+    * Update CastXML to be based off Clang 7.
+    * Added include files to MSBuild update checks so editing the native code that is being mapped will trigger a regeneration.
+
+Bug Fixes:
+
+    * Fix NRE when VS is not installed.
+
+1.1.2
+========
+
+Bug Fixes:
+
+    * Account for null struct-to-class instances when marshalling from native.
+
 1.1.1
 ========
 

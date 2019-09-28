@@ -23,7 +23,6 @@ namespace SharpGen.UnitTests.Mapping
             {
                 Id = nameof(Basic),
                 Namespace = nameof(Basic),
-                Assembly = nameof(Basic),
                 Includes =
                 {
                     new Config.IncludeRule
@@ -77,7 +76,7 @@ namespace SharpGen.UnitTests.Mapping
             var (solution, _) = MapModel(module, config);
 
             Assert.Single(solution.EnumerateDescendants().OfType<CsGroup>());
-            
+
             var group = solution.EnumerateDescendants().OfType<CsGroup>().First();
             Assert.Equal("Functions", group.Name);
 
@@ -95,7 +94,6 @@ namespace SharpGen.UnitTests.Mapping
             var config = new Config.ConfigFile
             {
                 Id = nameof(PointerSizeReturnValueNotLarge),
-                Assembly = nameof(PointerSizeReturnValueNotLarge),
                 Namespace = nameof(PointerSizeReturnValueNotLarge),
                 Includes =
                 {
@@ -112,6 +110,7 @@ namespace SharpGen.UnitTests.Mapping
                     {
                         Struct = "SharpGen.Runtime.PointerSize",
                         SizeOf = 8,
+                        IsNativePrimitive = true,
                     }
                 },
                 Bindings =
@@ -156,6 +155,77 @@ namespace SharpGen.UnitTests.Mapping
             var method = csIface.Methods.First();
 
             Assert.False(method.IsReturnStructLarge);
+        }
+
+        [Fact]
+        public void NativePrimitiveTypeNotLarge()
+        {
+            var config = new Config.ConfigFile
+            {
+                Id = nameof(NativePrimitiveTypeNotLarge),
+                Namespace = nameof(NativePrimitiveTypeNotLarge),
+                Includes =
+                {
+                    new Config.IncludeRule
+                    {
+                        File = "pointerSize.h",
+                        Attach = true,
+                        Namespace = nameof(NativePrimitiveTypeNotLarge)
+                    }
+                },
+                Extension =
+                {
+                    new DefineExtensionRule
+                    {
+                        Struct = "NativePrimitiveType",
+                        SizeOf = 16,
+                        IsNativePrimitive = true,
+                    }
+                },
+                Bindings =
+                {
+                    new Config.BindRule("NativePrimitive", "NativePrimitiveType")
+                }
+            };
+
+            var iface = new CppInterface
+            {
+                Name = "Interface",
+                TotalMethodCount = 1
+            };
+
+            iface.Add(new CppMethod
+            {
+                Name = "method",
+                ReturnValue = new CppReturnValue
+                {
+                    TypeName = "NativePrimitive"
+                }
+            });
+
+            var include = new CppInclude
+            {
+                Name = "pointerSize"
+            };
+
+            include.Add(iface);
+
+            var module = new CppModule();
+            module.Add(include);
+
+            var (solution, _) = MapModel(module, config);
+
+            Assert.Single(solution.EnumerateDescendants().OfType<CsInterface>());
+
+            var csIface = solution.EnumerateDescendants().OfType<CsInterface>().First();
+
+            Assert.Single(csIface.Methods);
+
+            var method = csIface.Methods.First();
+
+            Assert.False(method.IsReturnStructLarge);
+
+            Assert.False(Logger.HasErrors);
         }
     }
 }

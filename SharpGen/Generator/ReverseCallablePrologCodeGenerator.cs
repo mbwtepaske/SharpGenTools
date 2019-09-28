@@ -7,7 +7,7 @@ using static Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
 
 namespace SharpGen.Generator
 {
-    class ReverseCallablePrologCodeGenerator : IMultiCodeGenerator<CsCallable, StatementSyntax>
+    class ReverseCallablePrologCodeGenerator : IMultiCodeGenerator<(CsCallable, InteropMethodSignature), StatementSyntax>
     {
         private readonly IGeneratorRegistry generators;
         private readonly GlobalNamespaceProvider globalNamespace;
@@ -18,13 +18,12 @@ namespace SharpGen.Generator
             this.globalNamespace = globalNamespace;
         }
 
-        public IEnumerable<StatementSyntax> GenerateCode(CsCallable csElement)
+        public IEnumerable<StatementSyntax> GenerateCode((CsCallable, InteropMethodSignature) callableSig)
         {
-            var interopParameters = csElement.Interop.ParameterTypes;
-            var realParameterStart = 0;
-            if (csElement.IsReturnStructLarge)
+            var (csElement, interopSig) = callableSig;
+            var interopParameters = interopSig.ParameterTypes;
+            if ((interopSig.Flags & InteropMethodSignatureFlags.ForcedReturnBufferSig) != 0)
             {
-                ++realParameterStart;
                 foreach (var statement in GenerateNativeByRefProlog(csElement.ReturnValue, IdentifierName("returnSlot")))
                 {
                     yield return statement;
@@ -42,7 +41,7 @@ namespace SharpGen.Generator
             {
                 var publicParameter = csElement.Parameters[i];
                 var nativeParameter = IdentifierName($"param{i}");
-                var prologBuilder = publicParameter.PassedByNativeReference
+                var prologBuilder = publicParameter.PassedByNativeReference && !publicParameter.IsArray
                     ? (Func<CsMarshalCallableBase, ExpressionSyntax, IEnumerable<StatementSyntax>>)GenerateNativeByRefProlog
                     : GenerateProlog;
                 foreach (var statement in prologBuilder(publicParameter, nativeParameter))
@@ -57,27 +56,33 @@ namespace SharpGen.Generator
             ExpressionSyntax nativeParameter)
         {
             var marshaller = generators.Marshalling.GetMarshaller(publicElement);
+            var publicType = ParseTypeName(publicElement.PublicType.QualifiedName);
+            if (publicElement.IsArray)
+            {
+                publicType = ArrayType(publicType, SingletonList(ArrayRankSpecifier()));
+            }
             yield return LocalDeclarationStatement(
-                VariableDeclaration(ParseTypeName(publicElement.PublicType.QualifiedName))
+                VariableDeclaration(publicType)
                 .AddVariables(
                     VariableDeclarator(Identifier(publicElement.Name))
                         .WithInitializer(
                             EqualsValueClause(
-                                DefaultExpression(ParseTypeName(publicElement.PublicType.QualifiedName))))));
+                                DefaultExpression(publicType)))));
 
             if (marshaller.GeneratesMarshalVariable(publicElement))
             {
+                var marshalTypeSyntax = marshaller.GetMarshalTypeSyntax(publicElement);
                 yield return LocalDeclarationStatement(
-                    VariableDeclaration(marshaller.GetMarshalTypeSyntax(publicElement))
+                    VariableDeclaration(marshalTypeSyntax)
                     .AddVariables(
                         VariableDeclarator(generators.Marshalling.GetMarshalStorageLocationIdentifier(publicElement))
                         .WithInitializer(
-                            nativeParameter != null
-                            ? EqualsValueClause(
-                                CastExpression(
-                                    marshaller.GetMarshalTypeSyntax(publicElement),
-                                    nativeParameter))
-                            : null)));
+                            EqualsValueClause(
+                                nativeParameter != null
+                                ? (ExpressionSyntax)CastExpression(
+                                    marshalTypeSyntax,
+                                    nativeParameter)
+                                : DefaultExpression(marshalTypeSyntax)))));
             }
             else
             {
